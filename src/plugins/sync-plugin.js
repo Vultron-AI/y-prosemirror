@@ -749,14 +749,23 @@ const createTextNodesFromYText = (
   const nodes = []
   const deltas = text.toDelta(snapshot, prevSnapshot, computeYChange)
   try {
-    for (let i = 0; i < deltas.length; i++) {
-      const delta = deltas[i]
+    deltas.forEach((delta) => {
       const marks = []
       for (const markName in delta.attributes) {
-        marks.push(schema.mark(markName, delta.attributes[markName]))
+        const markAttrs = delta.attributes[markName]
+        if (Array.isArray(markAttrs)) {
+          // Handle multiple marks of the same type
+          markAttrs.forEach((attrs) => {
+            marks.push(schema.mark(markName, attrs))
+          })
+        } else {
+          // Handle single mark
+          marks.push(schema.mark(markName, markAttrs))
+        }
       }
-      nodes.push(schema.text(delta.insert, marks))
-    }
+      const textNode = schema.text(delta.insert, marks)
+      nodes.push(textNode)
+    });
   } catch (e) {
     // an error occured while creating the node. This is probably a result of a concurrent action.
     /** @type {Y.Doc} */ (text.doc).transact((transaction) => {
@@ -1002,8 +1011,17 @@ const updateYText = (ytext, ptexts, mapping) => {
 const marksToAttributes = (marks) => {
   const pattrs = {}
   marks.forEach((mark) => {
-    if (mark.type.name !== 'ychange') {
-      pattrs[mark.type.name] = mark.attrs
+    if (mark.type.name !== "ychange") {
+      const markName = mark.type.name
+      if (pattrs[markName]) {
+        // If this mark type already exists, convert to array if necessary
+        if (!Array.isArray(pattrs[markName])) {
+          pattrs[markName] = [pattrs[markName]]
+        }
+        pattrs[markName].push(mark.attrs)
+      } else {
+        pattrs[markName] = mark.attrs
+      }
     }
   })
   return pattrs
